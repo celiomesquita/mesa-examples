@@ -1,13 +1,9 @@
 import mesa
-from mesa.discrete_space import OrthogonalMooreGrid
-from mesa.discrete_space.cell_agent import CellAgent
-from mesa.experimental.meta_agents.meta_agent import create_meta_agent
+from mesa.experimental.cell_space import OrthogonalMooreGrid, CellAgent
 
 from .agents import (
     InventoryAgent,
-    RouteAgent,
-    SensorAgent,
-    WorkerAgent,
+    RobotAgent,
 )
 from .make_warehouse import make_warehouse
 
@@ -61,28 +57,15 @@ class WarehouseModel(mesa.Model):
 
         # Create Robot Agents
         for idx in range(len(self.loading_docks)):
-            # Create constituting_agents
-            router = RouteAgent(self)
-            sensor = SensorAgent(self)
-            worker = WorkerAgent(
+            robot = RobotAgent(
                 self,
+                self.warehouse[self.charging_stations[idx]],
                 self.warehouse[self.loading_docks[idx]],
                 self.warehouse[self.charging_stations[idx]],
             )
-
-            # Create meta-agent and place in warehouse
-            self.RobotAgent = create_meta_agent(
-                self,
-                "RobotAgent",
-                [router, sensor, worker],
-                CellAgent,
-                meta_attributes={
-                    "cell": self.warehouse[self.charging_stations[idx]],
-                    "status": "open",
-                },
-                assume_constituting_agent_attributes=True,
-                assume_constituting_agent_methods=True,
-            )
+            # Store reference to robot type for compatibility
+            if not hasattr(self, 'RobotAgent'):
+                self.RobotAgent = robot
 
     def central_move(self, robot):
         """Consolidates meta-agent behavior in the model class.
@@ -94,7 +77,7 @@ class WarehouseModel(mesa.Model):
 
     def step(self):
         """Advance the model by one step."""
-        for robot in self.agents_by_type[type(self.RobotAgent)]:
+        for robot in self.agents_by_type[RobotAgent]:
             if robot.status == "open":  # Assign a task to the robot
                 item = self.random.choice(self.agents_by_type[InventoryAgent])
                 if item.quantity > 0:

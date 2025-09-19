@@ -3,7 +3,7 @@ import pandas as pd
 import solara
 from mesa.visualization import SolaraViz
 from mesa.visualization.utils import update_counter
-from warehouse.agents import InventoryAgent
+from warehouse.agents import InventoryAgent, RobotAgent
 from warehouse.model import WarehouseModel
 
 # Constants
@@ -52,7 +52,7 @@ def plot_warehouse(model):
 
     # Prepare data for inventory and robot agents
     inventory_data = prepare_agent_data(model, InventoryAgent, "Inventory")
-    robot_data = prepare_agent_data(model, type(model.RobotAgent), "Robot")
+    robot_data = prepare_agent_data(model, RobotAgent, "Robot")
 
     # Combine data into a single DataFrame
     data = pd.DataFrame(inventory_data + robot_data)

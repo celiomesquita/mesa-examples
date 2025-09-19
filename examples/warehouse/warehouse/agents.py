@@ -1,7 +1,7 @@
 from queue import PriorityQueue
 
 import mesa
-from mesa.discrete_space import FixedAgent
+from mesa.experimental.cell_space import FixedAgent, CellAgent
 
 
 class InventoryAgent(FixedAgent):
@@ -14,14 +14,21 @@ class InventoryAgent(FixedAgent):
         self.quantity = 1000  # Default quantity
 
 
-class RouteAgent(mesa.Agent):
-    """Handles path finding for agents in the warehouse.
+class RobotAgent(CellAgent):
+    """Represents a robot that can navigate the warehouse and perform tasks.
 
-    Intended to be a pseudo onboard GPS system for robots.
+    Combines routing, sensing, and working capabilities in a single agent.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, cell, loading_dock, charging_station):
         super().__init__(model)
+        self.cell = cell
+        self.loading_dock = loading_dock
+        self.charging_station = charging_station
+        self.path = None
+        self.carrying = None
+        self.item = None
+        self.status = "open"
 
     def find_path(self, start, goal) -> list[tuple[int, int, int]] | None:
         """Determines the path for a robot to take using the A* algorithm."""
@@ -68,16 +75,6 @@ class RouteAgent(mesa.Agent):
 
         return None
 
-
-class SensorAgent(mesa.Agent):
-    """Detects entities in the area and handles movement along a path.
-
-    Intended to be a pseudo onboard sensor system for robot.
-    """
-
-    def __init__(self, model):
-        super().__init__(model)
-
     def move(
         self, coord: tuple[int, int, int], path: list[tuple[int, int, int]]
     ) -> str:
@@ -91,33 +88,19 @@ class SensorAgent(mesa.Agent):
 
         next_cell = self.model.warehouse[path[idx + 1]]
         if next_cell.is_empty:
-            self.meta_agent.cell = next_cell
+            self.cell = next_cell
             return "moving"
 
         # Handle obstacle
-        neighbors = self.model.warehouse[self.meta_agent.cell.coordinate].neighborhood
+        neighbors = self.model.warehouse[self.cell.coordinate].neighborhood
         empty_neighbors = [n for n in neighbors if n.is_empty]
         if empty_neighbors:
-            self.meta_agent.cell = self.random.choice(empty_neighbors)
+            self.cell = self.random.choice(empty_neighbors)
 
         # Recalculate path
-        new_path = self.meta_agent.get_constituting_agent_instance(
-            RouteAgent
-        ).find_path(self.meta_agent.cell, self.meta_agent.item.cell)
-        self.meta_agent.path = new_path
+        new_path = self.find_path(self.cell, self.item.cell)
+        self.path = new_path
         return "recalculating"
-
-
-class WorkerAgent(mesa.Agent):
-    """Represents a robot worker responsible for collecting and loading items."""
-
-    def __init__(self, model, ld, cs):
-        super().__init__(model)
-        self.loading_dock = ld
-        self.charging_station = cs
-        self.path: list[tuple[int, int, int]] | None = None
-        self.carrying: str | None = None
-        self.item: InventoryAgent | None = None
 
     def initiate_task(self, item: InventoryAgent):
         """Initiates a task for the robot to perform."""
@@ -126,24 +109,26 @@ class WorkerAgent(mesa.Agent):
 
     def continue_task(self):
         """Continues the task if the robot is able to perform it."""
-        status = self.meta_agent.get_constituting_agent_instance(SensorAgent).move(
-            self.cell.coordinate, self.path
-        )
+        status = self.move(self.cell.coordinate, self.path)
 
-        if status == "movement complete" and self.meta_agent.status == "inventory":
+        if status == "movement complete" and self.status == "inventory":
             # Pick up item and bring to loading dock
-            self.meta_agent.cell = self.model.warehouse[
-                *self.meta_agent.cell.coordinate[:2], self.item.cell.coordinate[2]
-            ]
-            self.meta_agent.status = "loading"
+            x, y = self.cell.coordinate[:2]
+            z = self.item.cell.coordinate[2]
+            self.cell = self.model.warehouse[x, y, z]
+            self.status = "loading"
             self.carrying = self.item.item
             self.item.quantity -= 1
-            self.meta_agent.cell = self.model.warehouse[
-                *self.meta_agent.cell.coordinate[:2], 0
-            ]
+            self.cell = self.model.warehouse[x, y, 0]
             self.path = self.find_path(self.cell, self.loading_dock)
 
-        if status == "movement complete" and self.meta_agent.status == "loading":
+        if status == "movement complete" and self.status == "loading":
             # Load item onto truck and return to charging station
             self.carrying = None
-            self.meta_agent.status = "open"
+            self.status = "open"
+
+
+# Keep old class names for backwards compatibility
+RouteAgent = RobotAgent
+SensorAgent = RobotAgent
+WorkerAgent = RobotAgent

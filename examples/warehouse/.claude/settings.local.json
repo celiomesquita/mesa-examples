@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//mnt/c/Users/celio/Documents/GitHub/mesa-examples/**)",
+      "Bash(python:*)",
+      "Bash(solara run:*)",
+      "Bash(timeout 10 solara run:*)",
+      "Bash(timeout:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
